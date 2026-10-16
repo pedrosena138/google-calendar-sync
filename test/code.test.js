@@ -239,7 +239,7 @@ globalThis.CalendarApp = {
 const source =
   fs.readFileSync(new URL("../src/Code.gs", import.meta.url), "utf8") +
   "\nexport { toRow, splitTitle, normalizeEvent, toDate, callIf, startOfDay, addDays, parseDate, " +
-  "prepareSheet, writeRows, runSync, HEADERS };\n";
+  "prepareSheet, writeRows, runSync, getSettings, syncWindow, onOpen, HEADERS };\n";
 
 const script = await import(`data:text/javascript,${encodeURIComponent(source)}`);
 
@@ -268,6 +268,61 @@ test("the due date column is formatted as a date", () => {
     formatted.some((c) => c[3] === 8),
     "applied to the Next Step Due Date column",
   );
+});
+
+test("the default window is 30 days back and 30 days ahead", () => {
+  const settings = script.getSettings();
+  assert.equal(settings.daysBehind, 30);
+  assert.equal(settings.daysAhead, 30);
+
+  const { start, end } = script.syncWindow(settings, new Date("2026-10-15T13:37:00Z"));
+  assert.equal(start.toISOString().slice(0, 10), "2026-09-15", "30 days back");
+  assert.equal(end.toISOString().slice(0, 10), "2026-11-14", "30 days ahead");
+  assert.equal(start.getHours(), 0, "starts at midnight");
+});
+
+test("the window honours saved properties and ignores bad values", () => {
+  scriptProperties.DAYS_BEHIND = "7";
+  scriptProperties.DAYS_AHEAD = "0";
+  let settings = script.getSettings();
+  assert.equal(settings.daysBehind, 7);
+  assert.equal(settings.daysAhead, 0, "zero days ahead is a valid setting");
+
+  const { start, end } = script.syncWindow(settings, new Date("2026-10-15T13:37:00Z"));
+  assert.equal(start.toISOString().slice(0, 10), "2026-10-08");
+  assert.equal(end.toISOString().slice(0, 10), "2026-10-15", "zero ahead means today only");
+
+  scriptProperties.DAYS_AHEAD = "not-a-number";
+  assert.equal(script.getSettings().daysAhead, 30, "falls back to the default");
+
+  delete scriptProperties.DAYS_BEHIND;
+  delete scriptProperties.DAYS_AHEAD;
+});
+
+test("the menu no longer offers the 30 day shortcut", () => {
+  const items = [];
+  const menu = {
+    addItem(label, fn) {
+      items.push([label, fn]);
+      return menu;
+    },
+    addSeparator() {
+      items.push(["-", null]);
+      return menu;
+    },
+    addToUi() {
+      return menu;
+    },
+  };
+  const uiStub = globalThis.SpreadsheetApp;
+  globalThis.SpreadsheetApp = {
+    ...uiStub,
+    getUi: () => ({ createMenu: () => menu }),
+  };
+  script.onOpen();
+  globalThis.SpreadsheetApp = uiStub;
+
+  assert.deepEqual(items.map((i) => i[0]), ["Sync now", "-", "Settings…"]);
 });
 
 test("Status and Next Step both get dropdowns", () => {

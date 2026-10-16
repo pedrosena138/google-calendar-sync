@@ -12,7 +12,10 @@ const SETTINGS = {
   CALENDAR_IDS_KEY: 'CALENDAR_IDS',
   /** Property holding how many days ahead to sync. */
   DAYS_AHEAD_KEY: 'DAYS_AHEAD',
-  DEFAULT_DAYS_AHEAD: 14,
+  /** Property holding how many days back to sync. */
+  DAYS_BEHIND_KEY: 'DAYS_BEHIND',
+  DEFAULT_DAYS_AHEAD: 30,
+  DEFAULT_DAYS_BEHIND: 30,
 };
 
 const HEADERS = [
@@ -54,7 +57,6 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Calendar Sync')
     .addItem('Sync now', 'syncEvents')
-    .addItem('Sync next 30 days', 'syncThirtyDays')
     .addSeparator()
     .addItem('Settings…', 'showSettings')
     .addToUi();
@@ -77,8 +79,27 @@ function getSettings() {
 
   return {
     calendarIds: calendars.length ? calendars : ['primary'],
-    daysAhead: Number(properties.getProperty(SETTINGS.DAYS_AHEAD_KEY)) || SETTINGS.DEFAULT_DAYS_AHEAD,
+    daysAhead: readDays(properties, SETTINGS.DAYS_AHEAD_KEY, SETTINGS.DEFAULT_DAYS_AHEAD),
+    daysBehind: readDays(properties, SETTINGS.DAYS_BEHIND_KEY, SETTINGS.DEFAULT_DAYS_BEHIND),
   };
+}
+
+/** Validates a number of days typed into the settings prompt. */
+function toDays(value, fallback) {
+  const days = Number(value);
+  return Number.isFinite(days) && days >= 0 ? Math.floor(days) : fallback;
+}
+
+/**
+ * Reads a day count from script properties.
+ *
+ * Unlike `Number(value) || fallback`, this keeps a deliberate 0, which is a
+ * valid setting meaning "today only".
+ */
+function readDays(properties, key, fallback) {
+  const raw = properties.getProperty(key);
+  if (raw === null || String(raw).trim() === '') return fallback;
+  return toDays(raw, fallback);
 }
 
 function showSettings() {
@@ -89,6 +110,8 @@ function showSettings() {
     'Calendar Sync settings',
     'Calendar ids (comma separated, use "primary" for your own calendar):\n' +
       settings.calendarIds.join(', ') +
+      '\n\nDays back to sync:\n' +
+      settings.daysBehind +
       '\n\nDays ahead to sync:\n' +
       settings.daysAhead,
     ui.ButtonSet.OK_CANCEL,
@@ -98,32 +121,33 @@ function showSettings() {
 
   const lines = response.getResponseText().split('\n');
   const calendarIds = (lines.shift() || '').split(',').map((v) => v.trim()).filter(Boolean);
-  const daysAhead = Number(lines.join(' '));
+  const daysBehind = toDays((lines.shift() || '').trim(), SETTINGS.DEFAULT_DAYS_BEHIND);
+  const daysAhead = toDays(lines.join(' ').trim(), SETTINGS.DEFAULT_DAYS_AHEAD);
 
   const properties = PropertiesService.getScriptProperties();
   properties.setProperty(SETTINGS.CALENDAR_IDS_KEY, calendarIds.join(','));
-  properties.setProperty(
-    SETTINGS.DAYS_AHEAD_KEY,
-    Number.isFinite(daysAhead) && daysAhead > 0 ? String(daysAhead) : SETTINGS.DEFAULT_DAYS_AHEAD,
-  );
+  properties.setProperty(SETTINGS.DAYS_BEHIND_KEY, String(daysBehind));
+  properties.setProperty(SETTINGS.DAYS_AHEAD_KEY, String(daysAhead));
 
   ui.alert('Saved. Run "Sync now" to apply.');
 }
 
 /* ------------------------------------------------------------------- sync */
 
-/** Syncs from today for the configured number of days. */
-function syncEvents() {
-  const settings = getSettings();
-  const start = startOfDay(new Date());
-  return runSync(start, addDays(start, settings.daysAhead), settings);
+/** The window a standard sync covers: some days back and ahead of today. */
+function syncWindow(settings, today) {
+  const midnight = startOfDay(today);
+  return {
+    start: addDays(midnight, -settings.daysBehind),
+    end: addDays(midnight, settings.daysAhead),
+  };
 }
 
-/** Syncs from today for 30 days, ignoring the saved setting. */
-function syncThirtyDays() {
+/** Syncs the configured window: some days back and ahead of today. */
+function syncEvents() {
   const settings = getSettings();
-  const start = startOfDay(new Date());
-  return runSync(start, addDays(start, 30), settings);
+  const window = syncWindow(settings, new Date());
+  return runSync(window.start, window.end, settings);
 }
 
 /**

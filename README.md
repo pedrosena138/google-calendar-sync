@@ -17,11 +17,10 @@ A **Calendar Sync** menu appears in the toolbar:
 
 | Menu item | What it does |
 | --- | --- |
-| Sync now | Today → today + 14 days (configurable) |
-| Sync next 30 days | Today → today + 30 days |
-| Settings… | Change calendar ids and the number of days |
+| Sync now | Syncs 30 days back and 30 days ahead of today (configurable) |
+| Settings… | Change calendar ids and the days back/ahead |
 
-Settings are stored in **Script properties** (`CALENDAR_IDS`, `DAYS_AHEAD`). Defaults to `primary` — your own calendar. For others, copy the id from Google Calendar's *Settings → Integrate calendar*:
+Settings are stored in **Script properties** (`CALENDAR_IDS`, `DAYS_BEHIND`, `DAYS_AHEAD`), defaulting to `primary` and 30 days each way. For other calendars, copy the id from Google Calendar's *Settings → Integrate calendar*:
 
 ```
 primary, work@company.com, en.GB#holiday@group.v.calendar.google.com
@@ -100,7 +99,7 @@ Use `syncCustomRange` instead to sync a fixed historical window — set script p
 - Scope is `calendar.readonly`: the script cannot create or change events.
 - Recurring events are expanded into individual occurrences within the window.
 - Multi-day events appear once, on their start date.
-- Apps Script quotas apply (30s execution, 50k cells written per call). Very large windows may be slow — keep `DAYS_AHEAD` reasonable.
+- Apps Script quotas apply (30s execution, 50k cells written per call). A 60 day window across several calendars is still a lot of rows — lower `DAYS_BEHIND` or `DAYS_AHEAD` if a sync starts timing out.
 
 `src/appsscript.json` holds the scopes. If you installed by pasting instead, Apps Script manages scopes automatically and you can ignore that file.
 
