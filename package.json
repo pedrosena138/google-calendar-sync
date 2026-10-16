@@ -1,0 +1,20 @@
+{
+  "name": "agenda-sync",
+  "version": "1.0.0",
+  "description": "Sync Google Calendar events into a Google Sheet with Apps Script",
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.11.2",
+      "onFail": "download"
+    }
+  },
+  "packageManager": "pnpm@12.11.2",
+  "type": "module"
+}
